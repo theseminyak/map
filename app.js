@@ -3,6 +3,11 @@ const HOTEL = {
   location: { lat: -8.68588, lng: 115.1541 },
 };
 
+const INITIAL_MAP_VIEW = {
+  center: { lat: -8.6833, lng: 115.1591 },
+  zoom: 15,
+};
+
 const ROUTING_SERVERS = {
   DRIVING: "https://routing.openstreetmap.de/routed-car",
   WALKING: "https://routing.openstreetmap.de/routed-foot",
@@ -71,8 +76,8 @@ function initializeMap() {
   }
 
   map = L.map("map", {
-    center: [-8.44, 115.08],
-    zoom: 9,
+    center: [INITIAL_MAP_VIEW.center.lat, INITIAL_MAP_VIEW.center.lng],
+    zoom: INITIAL_MAP_VIEW.zoom,
     zoomControl: false,
     attributionControl: true,
     scrollWheelZoom: false,
