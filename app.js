@@ -3,6 +3,18 @@ const HOTEL = {
   location: { lat: -8.68588, lng: 115.1541 },
 };
 
+const ROUTING_SERVERS = {
+  DRIVING: "https://routing.openstreetmap.de/routed-car",
+  WALKING: "https://routing.openstreetmap.de/routed-foot",
+  BICYCLING: "https://routing.openstreetmap.de/routed-bike",
+};
+
+const OSM_ENGINES = {
+  DRIVING: "fossgis_osrm_car",
+  WALKING: "fossgis_osrm_foot",
+  BICYCLING: "fossgis_osrm_bike",
+};
+
 const MODE_LABELS = {
   DRIVING: "car",
   TRANSIT: "public transport",
@@ -10,156 +22,185 @@ const MODE_LABELS = {
   BICYCLING: "bicycle",
 };
 
+const GEOCODE_CACHE_KEY = "seminyak-geocode-cache-v1";
+const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+
 let map;
-let Route;
-let AdvancedMarkerElement;
-let selectedOrigin = null;
-let selectedMode = "DRIVING";
-let routePolylines = [];
+let routeLayer = null;
 let originMarker = null;
+let selectedMode = "DRIVING";
 
 const elements = {
-  map: document.querySelector("#map"),
-  mapPlaceholder: document.querySelector("#map-placeholder"),
-  mapSetup: document.querySelector("#map-setup"),
-  autocompleteContainer: document.querySelector("#autocomplete-container"),
+  addressInput: document.querySelector("#address-input"),
   calculateButton: document.querySelector("#calculate-button"),
   routeStatus: document.querySelector("#route-status"),
   routeResult: document.querySelector("#route-result"),
   routeDuration: document.querySelector("#route-duration"),
   routeDistance: document.querySelector("#route-distance"),
-  googleMapsLink: document.querySelector("#google-maps-link"),
+  openStreetMapLink: document.querySelector("#openstreetmap-link"),
 };
-
-function getApiKey() {
-  return window.SEMINYAK_CONFIG?.googleMapsApiKey?.trim() || "";
-}
-
-function hasUsableApiKey(apiKey) {
-  return apiKey && !apiKey.includes("PASTE_YOUR") && apiKey.length > 20;
-}
-
-function loadGoogleMaps(apiKey) {
-  return new Promise((resolve, reject) => {
-    const callbackName = `initSeminyakMap_${Date.now()}`;
-    const script = document.createElement("script");
-    const params = new URLSearchParams({
-      key: apiKey,
-      v: "weekly",
-      loading: "async",
-      libraries: "maps,marker,places,routes",
-      language: "en",
-      region: "ID",
-      auth_referrer_policy: "origin",
-      callback: callbackName,
-    });
-
-    window[callbackName] = () => {
-      delete window[callbackName];
-      resolve(window.google.maps);
-    };
-
-    script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
-    script.async = true;
-    script.onerror = () => {
-      delete window[callbackName];
-      reject(new Error("Google Maps could not load."));
-    };
-    document.head.appendChild(script);
-  });
-}
 
 function setStatus(message, isError = false) {
   elements.routeStatus.textContent = message;
   elements.routeStatus.classList.toggle("error", isError);
 }
 
+function makeHotelIcon() {
+  return L.divIcon({
+    className: "custom-map-icon",
+    html: '<div class="hotel-pin"></div>',
+    iconSize: [35, 44],
+    iconAnchor: [17, 42],
+    tooltipAnchor: [0, -38],
+  });
+}
+
+function makeOriginIcon() {
+  return L.divIcon({
+    className: "custom-map-icon",
+    html: '<div class="origin-pin"></div>',
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  });
+}
+
+function initializeMap() {
+  if (!window.L) {
+    setStatus("The map library could not load. Please refresh the page.", true);
+    return;
+  }
+
+  map = L.map("map", {
+    center: [-8.44, 115.08],
+    zoom: 9,
+    zoomControl: false,
+    attributionControl: true,
+    scrollWheelZoom: false,
+  });
+
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
+  }).addTo(map);
+
+  L.marker([HOTEL.location.lat, HOTEL.location.lng], {
+    icon: makeHotelIcon(),
+    title: HOTEL.name,
+  })
+    .addTo(map)
+    .bindTooltip(HOTEL.name, { direction: "top", offset: [0, -33] });
+}
+
+function normalizeQuery(query) {
+  return query.trim().toLocaleLowerCase("en").replace(/\s+/g, " ");
+}
+
+function getCachedLocation(query) {
+  try {
+    const cache = JSON.parse(localStorage.getItem(GEOCODE_CACHE_KEY) || "{}");
+    const cached = cache[normalizeQuery(query)];
+    if (!cached || Date.now() - cached.savedAt > CACHE_MAX_AGE) return null;
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+function cacheLocation(query, location) {
+  try {
+    const cache = JSON.parse(localStorage.getItem(GEOCODE_CACHE_KEY) || "{}");
+    const entries = Object.entries(cache)
+      .filter(([, item]) => Date.now() - item.savedAt <= CACHE_MAX_AGE)
+      .slice(-19);
+    const nextCache = Object.fromEntries(entries);
+    nextCache[normalizeQuery(query)] = { ...location, savedAt: Date.now() };
+    localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(nextCache));
+  } catch {
+    // The route still works when browser storage is unavailable.
+  }
+}
+
+async function geocodeAddress(query) {
+  const cached = getCachedLocation(query);
+  if (cached) return cached;
+
+  const params = new URLSearchParams({
+    format: "jsonv2",
+    q: query,
+    limit: "1",
+    countrycodes: "id",
+    addressdetails: "0",
+  });
+
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) throw new Error("GEOCODING_UNAVAILABLE");
+
+  const results = await response.json();
+  if (!results.length) throw new Error("ADDRESS_NOT_FOUND");
+
+  const location = {
+    lat: Number(results[0].lat),
+    lng: Number(results[0].lon),
+    label: results[0].display_name,
+  };
+  cacheLocation(query, location);
+  return location;
+}
+
+async function fetchRoute(origin) {
+  const server = ROUTING_SERVERS[selectedMode];
+  if (!server) throw new Error("TRANSIT_UNAVAILABLE");
+
+  const coordinates = `${origin.lng},${origin.lat};${HOTEL.location.lng},${HOTEL.location.lat}`;
+  const params = new URLSearchParams({
+    overview: "full",
+    geometries: "geojson",
+    steps: "false",
+  });
+  const response = await fetch(`${server}/route/v1/driving/${coordinates}?${params}`);
+  if (!response.ok) throw new Error("ROUTING_UNAVAILABLE");
+
+  const result = await response.json();
+  if (result.code !== "Ok" || !result.routes?.length) throw new Error("NO_ROUTE");
+  return result.routes[0];
+}
+
 function clearRoute() {
-  routePolylines.forEach((polyline) => polyline.setMap(null));
-  routePolylines = [];
+  if (routeLayer) map.removeLayer(routeLayer);
+  if (originMarker) map.removeLayer(originMarker);
+  routeLayer = null;
+  originMarker = null;
   elements.routeResult.hidden = true;
 }
 
-function createPin(className, title) {
-  const pin = document.createElement("div");
-  pin.className = className;
-  pin.title = title;
-  return pin;
-}
+function drawRoute(origin, route) {
+  clearRoute();
 
-function updateOriginMarker(location, title) {
-  if (originMarker) originMarker.map = null;
-  originMarker = new AdvancedMarkerElement({
-    map,
-    position: location,
-    title,
-    content: createPin("origin-pin", title),
+  routeLayer = L.geoJSON(route.geometry, {
+    style: {
+      color: "#252525",
+      opacity: 0.9,
+      weight: 5,
+      lineCap: "round",
+      lineJoin: "round",
+    },
+  }).addTo(map);
+
+  originMarker = L.marker([origin.lat, origin.lng], {
+    icon: makeOriginIcon(),
+    title: origin.label || "Starting point",
+  }).addTo(map);
+
+  map.fitBounds(routeLayer.getBounds(), {
+    padding: window.innerWidth < 760 ? [42, 42] : [70, 70],
   });
 }
 
-async function initializeMap() {
-  const [{ Map }, markerLibrary, placesLibrary, routesLibrary] = await Promise.all([
-    google.maps.importLibrary("maps"),
-    google.maps.importLibrary("marker"),
-    google.maps.importLibrary("places"),
-    google.maps.importLibrary("routes"),
-  ]);
-
-  AdvancedMarkerElement = markerLibrary.AdvancedMarkerElement;
-  Route = routesLibrary.Route;
-
-  map = new Map(elements.map, {
-    center: { lat: -8.44, lng: 115.08 },
-    zoom: 9,
-    mapId: "DEMO_MAP_ID",
-    disableDefaultUI: true,
-    gestureHandling: "cooperative",
-  });
-
-  new AdvancedMarkerElement({
-    map,
-    position: HOTEL.location,
-    title: HOTEL.name,
-    content: createPin("hotel-pin", HOTEL.name),
-  });
-
-  const placeAutocomplete = new placesLibrary.PlaceAutocompleteElement();
-  placeAutocomplete.placeholder = "| Your address location";
-  placeAutocomplete.includedRegionCodes = ["id"];
-  placeAutocomplete.locationBias = { center: HOTEL.location, radius: 80000 };
-
-  placeAutocomplete.addEventListener("gmp-select", async ({ placePrediction }) => {
-    try {
-      const place = placePrediction.toPlace();
-      await place.fetchFields({
-        fields: ["displayName", "formattedAddress", "location"],
-      });
-
-      if (!place.location) throw new Error("The selected place has no coordinates.");
-
-      selectedOrigin = place;
-      clearRoute();
-      updateOriginMarker(place.location, place.displayName || "Starting point");
-      elements.calculateButton.disabled = false;
-      setStatus("");
-    } catch (error) {
-      console.error(error);
-      setStatus("Please select another address from the suggestions.", true);
-    }
-  });
-
-  elements.autocompleteContainer.replaceChildren(placeAutocomplete);
-  elements.mapPlaceholder.hidden = true;
-  elements.mapSetup.hidden = true;
-}
-
-function getOriginLocation() {
-  if (!selectedOrigin) return null;
-  return selectedOrigin.location || selectedOrigin;
-}
-
-function formatDuration(milliseconds) {
-  const totalMinutes = Math.max(1, Math.round(milliseconds / 60000));
+function formatDuration(seconds) {
+  const totalMinutes = Math.max(1, Math.round(seconds / 60));
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   if (!hours) return `${minutes} min`;
@@ -175,71 +216,54 @@ function formatDistance(meters) {
   })} km`;
 }
 
-function buildGoogleMapsUrl() {
-  const origin = getOriginLocation();
-  const originLat = typeof origin.lat === "function" ? origin.lat() : origin.lat;
-  const originLng = typeof origin.lng === "function" ? origin.lng() : origin.lng;
-  const travelMode = {
-    DRIVING: "driving",
-    TRANSIT: "transit",
-    WALKING: "walking",
-    BICYCLING: "bicycling",
-  }[selectedMode];
-
+function buildOpenStreetMapUrl(origin) {
+  const engine = OSM_ENGINES[selectedMode];
   const params = new URLSearchParams({
-    api: "1",
-    origin: `${originLat},${originLng}`,
-    destination: `${HOTEL.location.lat},${HOTEL.location.lng}`,
-    travelmode: travelMode,
+    engine,
+    route: `${origin.lat},${origin.lng};${HOTEL.location.lat},${HOTEL.location.lng}`,
   });
-  return `https://www.google.com/maps/dir/?${params.toString()}`;
+  return `https://www.openstreetmap.org/directions?${params.toString()}#map=12/${HOTEL.location.lat}/${HOTEL.location.lng}`;
 }
 
 async function calculateRoute() {
-  if (!selectedOrigin || !Route) {
-    setStatus("Select your address from the suggestions first.", true);
+  const query = elements.addressInput.value.trim();
+  if (!query) {
+    elements.addressInput.focus();
+    setStatus("Enter your address location first.", true);
     return;
   }
 
-  clearRoute();
+  if (selectedMode === "TRANSIT") {
+    setStatus(
+      "Public transport is not available on the free OSM routing server. Choose car, walking or bicycle.",
+      true,
+    );
+    return;
+  }
+
   elements.calculateButton.disabled = true;
   elements.calculateButton.textContent = "Calculating…";
-  setStatus("");
+  setStatus("Finding your location and route…");
 
   try {
-    const { routes } = await Route.computeRoutes({
-      origin: selectedOrigin,
-      destination: HOTEL.location,
-      travelMode: selectedMode,
-      region: "id",
-      units: "METRIC",
-      fields: ["path", "distanceMeters", "durationMillis"],
-    });
+    const origin = await geocodeAddress(query);
+    const route = await fetchRoute(origin);
+    drawRoute(origin, route);
 
-    if (!routes?.length) throw new Error("NO_ROUTES");
-
-    const route = routes[0];
-    routePolylines = route.createPolylines();
-    routePolylines.forEach((polyline) => {
-      polyline.setOptions({
-        strokeColor: "#252525",
-        strokeOpacity: 0.9,
-        strokeWeight: 5,
-      });
-      polyline.setMap(map);
-    });
-
-    const bounds = new google.maps.LatLngBounds();
-    route.path.forEach((point) => bounds.extend(point));
-    map.fitBounds(bounds, window.innerWidth < 760 ? 42 : 70);
-
-    elements.routeDuration.textContent = formatDuration(route.durationMillis);
-    elements.routeDistance.textContent = formatDistance(route.distanceMeters);
-    elements.googleMapsLink.href = buildGoogleMapsUrl();
+    elements.routeDuration.textContent = formatDuration(route.duration);
+    elements.routeDistance.textContent = formatDistance(route.distance);
+    elements.openStreetMapLink.href = buildOpenStreetMapUrl(origin);
     elements.routeResult.hidden = false;
+    setStatus("");
   } catch (error) {
     console.error(error);
-    setStatus(`No ${MODE_LABELS[selectedMode]} route was found. Please try another travel mode.`, true);
+    const messages = {
+      ADDRESS_NOT_FOUND: "Address not found. Add the city or area name and try again.",
+      GEOCODING_UNAVAILABLE: "Address search is temporarily unavailable. Please try again shortly.",
+      ROUTING_UNAVAILABLE: "The free routing service is temporarily unavailable. Please try again shortly.",
+      NO_ROUTE: `No ${MODE_LABELS[selectedMode]} route was found. Try another travel mode.`,
+    };
+    setStatus(messages[error.message] || "The route could not be calculated. Please try again.", true);
   } finally {
     elements.calculateButton.disabled = false;
     elements.calculateButton.textContent = "Calculate route";
@@ -253,32 +277,18 @@ document.querySelectorAll(".mode-button").forEach((button) => {
       item.classList.toggle("active", active);
       item.setAttribute("aria-pressed", String(active));
     });
-
     selectedMode = button.dataset.mode;
-    if (selectedOrigin && !elements.routeResult.hidden) calculateRoute();
+    clearRoute();
+    setStatus("");
   });
 });
 
 elements.calculateButton.addEventListener("click", calculateRoute);
-
-async function start() {
-  const apiKey = getApiKey();
-  if (!hasUsableApiKey(apiKey)) {
-    elements.mapSetup.hidden = false;
-    setStatus("Add the Google Maps API key to activate address search and route calculation.");
-    return;
+elements.addressInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    calculateRoute();
   }
+});
 
-  try {
-    await loadGoogleMaps(apiKey);
-    await initializeMap();
-  } catch (error) {
-    console.error(error);
-    elements.mapSetup.hidden = false;
-    elements.mapSetup.innerHTML =
-      "Google Maps could not load. Check the API key, billing and website restrictions.";
-    setStatus("Google Maps could not load. Please check the Google Cloud configuration.", true);
-  }
-}
-
-start();
+initializeMap();
