@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Map, address and route calculator for The Seminyak Beach Resort & Spa in Bali."
+    />
+    <meta name="theme-color" content="#ffffff" />
+    <title>Location | The Seminyak Beach Resort & Spa</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="config.js"></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="header-crop" aria-hidden="true">
+      <span class="cropped-logo">ts</span>
+      <span class="cropped-button"></span>
+    </div>
+
+    <main>
+      <section class="location-layout" aria-label="The Seminyak location and contact information">
+        <aside class="information-panel">
+          <div class="information-block">
+            <p class="information-title">ADDRESS</p>
+            <address>
+              Jl. Kayu Aya, Pantai,<br />
+              Seminyak, Kec. Kuta,<br />
+              Kabupaten Badung, Bali<br />
+              80361, Indonesia
+            </address>
+          </div>
+
+          <div class="information-block contact-block">
+            <p class="information-title">CONTACT</p>
+            <a href="tel:+62361730814">+62 361 730814</a>
+            <a href="mailto:info@theseminyak.com">info@theseminyak.com</a>
+          </div>
+
+          <div class="check-times">
+            <p>Check-in: 15.00</p>
+            <p>Check-out 12.00</p>
+          </div>
+        </aside>
+
+        <div class="map-wrap">
+          <div id="map" aria-label="Map showing The Seminyak Beach Resort & Spa in Bali"></div>
+
+          <div id="map-placeholder" class="map-placeholder" aria-hidden="true">
+            <div class="placeholder-sea"></div>
+            <div class="placeholder-island">
+              <span class="island-label">BALI</span>
+              <span class="ubud-label">Ubud</span>
+              <span class="kuta-label">Kuta</span>
+            </div>
+            <div class="placeholder-pin"><span></span></div>
+          </div>
+
+          <div id="map-setup" class="map-setup" hidden>
+            Add the Google Maps API key in <strong>config.js</strong> to activate the map.
+          </div>
+        </div>
+      </section>
+
+      <section class="route-bar" aria-label="Calculate route to The Seminyak Resort">
+        <div class="travel-modes" role="group" aria-label="Travel mode">
+          <button class="mode-button active" type="button" data-mode="DRIVING" aria-label="Car" aria-pressed="true">
+            <span class="material-symbols-outlined" aria-hidden="true">directions_car</span>
+          </button>
+          <button class="mode-button" type="button" data-mode="TRANSIT" aria-label="Public transport" aria-pressed="false">
+            <span class="material-symbols-outlined" aria-hidden="true">airport_shuttle</span>
+          </button>
+          <button class="mode-button" type="button" data-mode="WALKING" aria-label="Walking" aria-pressed="false">
+            <span class="material-symbols-outlined" aria-hidden="true">footprint</span>
+          </button>
+          <button class="mode-button" type="button" data-mode="BICYCLING" aria-label="Bicycle" aria-pressed="false">
+            <span class="material-symbols-outlined" aria-hidden="true">directions_bike</span>
+          </button>
+        </div>
+
+        <p class="route-copy">Get the itinerary between The Seminyak Resort and</p>
+
+        <div id="autocomplete-container" class="address-control" aria-label="Your address location">
+          <div class="fake-input"><span>|</span> Your address location</div>
+        </div>
+
+        <button id="calculate-button" class="calculate-button" type="button" disabled>
+          Calculate route
+        </button>
+      </section>
+
+      <div id="route-feedback" class="route-feedback" aria-live="polite">
+        <p id="route-status">Select your address from the suggestions to calculate a route.</p>
+        <div id="route-result" class="route-result" hidden>
+          <span><strong id="route-duration">—</strong> travel time</span>
+          <span><strong id="route-distance">—</strong> distance</span>
+          <a id="google-maps-link" href="#" target="_blank" rel="noreferrer">Open in Google Maps ↗</a>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>
