@@ -13,6 +13,162 @@
   display: none !important;
 }
 
+/*
+ * Essential Leaflet layout rules are kept locally so the map remains aligned
+ * even when a third-party Leaflet stylesheet CDN is unavailable.
+ */
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-pane > svg,
+.leaflet-pane > canvas,
+.leaflet-image-layer,
+.leaflet-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.leaflet-container {
+  position: relative;
+  overflow: hidden;
+  outline-offset: 1px;
+}
+
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow {
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.leaflet-tile-container {
+  pointer-events: none;
+}
+
+.leaflet-tile {
+  max-width: none !important;
+  max-height: none !important;
+  visibility: hidden;
+}
+
+.leaflet-tile-loaded {
+  visibility: inherit;
+}
+
+.leaflet-map-pane canvas,
+.leaflet-map-pane svg {
+  z-index: 100;
+}
+
+.leaflet-tile-pane {
+  z-index: 200;
+}
+
+.leaflet-overlay-pane {
+  z-index: 400;
+}
+
+.leaflet-shadow-pane {
+  z-index: 500;
+}
+
+.leaflet-marker-pane {
+  z-index: 600;
+}
+
+.leaflet-tooltip-pane {
+  z-index: 650;
+}
+
+.leaflet-popup-pane {
+  z-index: 700;
+}
+
+.leaflet-pane > svg,
+.leaflet-pane > canvas {
+  max-width: none !important;
+  max-height: none !important;
+}
+
+.leaflet-zoom-animated {
+  transform-origin: 0 0;
+}
+
+.leaflet-control-container .leaflet-top,
+.leaflet-control-container .leaflet-bottom {
+  position: absolute;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.leaflet-control-container .leaflet-top {
+  top: 0;
+}
+
+.leaflet-control-container .leaflet-right {
+  right: 0;
+}
+
+.leaflet-control-container .leaflet-bottom {
+  bottom: 0;
+}
+
+.leaflet-control-container .leaflet-left {
+  left: 0;
+}
+
+.leaflet-control {
+  position: relative;
+  z-index: 800;
+  pointer-events: auto;
+}
+
+.leaflet-right .leaflet-control {
+  margin-right: 10px;
+}
+
+.leaflet-bottom .leaflet-control {
+  margin-bottom: 10px;
+}
+
+.leaflet-control-attribution {
+  margin: 0;
+  padding: 0 5px;
+  color: #333333;
+  background: rgba(255, 255, 255, 0.82);
+  line-height: 1.4;
+}
+
+.leaflet-control-attribution a {
+  color: #0068a3;
+  text-decoration: none;
+}
+
+.leaflet-dragging .leaflet-grab,
+.leaflet-dragging .leaflet-grab .leaflet-interactive {
+  cursor: grabbing;
+}
+
+.leaflet-grab {
+  cursor: grab;
+}
+
+.leaflet-interactive {
+  cursor: pointer;
+}
+
+.leaflet-tooltip {
+  position: absolute;
+  padding: 6px;
+  color: #222222;
+  background: #ffffff;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 html,
 body {
   margin: 0;
