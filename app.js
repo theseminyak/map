@@ -5,7 +5,7 @@ const HOTEL = {
 
 const INITIAL_MAP_VIEW = {
   center: { lat: -8.6833, lng: 115.1591 },
-  zoom: 15,
+  zoom: 50,
 };
 
 const ROUTING_SERVERS = {
